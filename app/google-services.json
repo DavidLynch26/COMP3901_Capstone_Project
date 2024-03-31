@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "981096491549",
+    "firebase_url": "https://easyatmmapper-default-rtdb.firebaseio.com",
+    "project_id": "easyatmmapper",
+    "storage_bucket": "easyatmmapper.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:981096491549:android:1f90711a075032574b74f4",
+        "android_client_info": {
+          "package_name": "com.example.easy_atm_mapper"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwJ5H84Vth8YKYQH2SJkdKnsni2LKPSuo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
