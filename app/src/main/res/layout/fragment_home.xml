@@ -81,23 +81,45 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:text="@string/currentlocation"
+        android:text="@string/currentLocation"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/buttonSearch" />
 
     <ImageButton
         android:id="@+id/imageButtonRecentre"
-        android:contentDescription="@string/recentrebutton"
-        android:background="@android:color/transparent"
         android:layout_width="70dp"
         android:layout_height="70dp"
-        android:layout_marginEnd="20dp"
-        android:layout_marginBottom="20dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginBottom="10dp"
         android:adjustViewBounds="true"
+        android:background="@android:color/transparent"
+        android:contentDescription="@string/recenter"
         android:scaleType="fitCenter"
         app:layout_constraintBottom_toTopOf="@+id/textInputLayoutDistance"
         app:layout_constraintEnd_toEndOf="parent"
         app:srcCompat="@drawable/location_crosshairs" />
+
+    <EditText
+        android:id="@+id/editTextBank"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="5dp"
+        android:clickable="false"
+        android:editable="false"
+        app:layout_constraintBottom_toTopOf="@+id/textInputLayoutBanks"
+        app:layout_constraintEnd_toStartOf="@+id/guidelineMiddle"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <EditText
+        android:id="@+id/editTextDistance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="5dp"
+        android:clickable="false"
+        android:editable="false"
+        app:layout_constraintBottom_toTopOf="@+id/textInputLayoutDistance"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="@+id/guidelineMiddle" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -2,7 +2,7 @@
     <string name="app_name">Easy ATM Mapper</string>
     <string name="select_bank">Select Bank</string>
     <string name="select_distance">Select Distance</string>
-    <string name="recentrebutton">Recentre Button</string>
-    <string name="currentlocation">Current Location</string>
+    <string name="recenter">Recenter Button</string>
+    <string name="currentLocation">Current Location</string>
     <string name="search">Search</string>
 </resources>

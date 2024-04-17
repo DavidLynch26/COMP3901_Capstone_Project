@@ -5,17 +5,21 @@ plugins {
 }
 
 android {
+
+    val apikey = project.properties["API_KEY"] as String
+//    println("API_KEY: $apiKey")
+
     namespace = "com.example.easy_atm_mapper"
     compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.easy_atm_mapper"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["API_KEY"] = apikey
     }
 
     buildTypes {

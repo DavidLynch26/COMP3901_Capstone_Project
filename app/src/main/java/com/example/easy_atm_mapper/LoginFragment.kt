@@ -43,7 +43,6 @@ class LoginFragment : Fragment() {
         }
 
         view.findViewById<Button>(R.id.buttonLogin).setOnClickListener {
-            Log.d("mytag", "Login Button Clicked")
             login()
         }
         return view
@@ -72,7 +71,6 @@ class LoginFragment : Fragment() {
         fun isUser() {
             val pb = (context as MainActivity)
                 .findViewById<ProgressBar>(R.id.progressBar)
-            Log.d("mytag", "User Login")
             pb.visibility = View.VISIBLE
             var found : Boolean = false
             usersCollection.get()
@@ -89,9 +87,7 @@ class LoginFragment : Fragment() {
                                     .show()
                                 Log.d("mytag", "User Login Successfully")
                                 Navigation.findNavController(view).navigate(R.id.action_loginFragment_to_homeFragment)
-                                Log.d("mytag", "User Login af nv")
                                 pb.visibility = View.GONE
-                                Log.d("mytag", "User Login af pb")
                                 found = true
                                 break
                             }
