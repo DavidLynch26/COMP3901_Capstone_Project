@@ -10,14 +10,7 @@ import androidx.core.app.ActivityCompat
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val activityInfo = packageManager.getActivityInfo(componentName, PackageManager.GET_META_DATA)
-
-        Log.d("ActivityInfo", activityInfo.toString())
-        val bundle = activityInfo.metaData
-        Log.d("Bundle", bundle.toString())
-
-        val apikey = bundle.getString("apikey").toString()
-
-        Log.d("APIKEY", apikey)
+        bundle = activityInfo.metaData
 
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -28,12 +21,15 @@ class MainActivity : AppCompatActivity() {
 
         ActivityCompat.requestPermissions(this, perms, 1)
 
-
 //        enableEdgeToEdge()
 //        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
 //            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
 //            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
 //            insets
 //        }
+    }
+
+    companion object {
+        lateinit var bundle: Bundle
     }
 }
