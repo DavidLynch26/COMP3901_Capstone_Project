@@ -27,11 +27,13 @@ import java.util.Date
 
 class LoginFragment : Fragment() {
 
-    private lateinit var view : View
     var exists: Boolean = false
+    private lateinit var view : View
+
     private val db = Firebase.firestore
     private val usersCollection = db.collection("users")
 
+    @OptIn(DelicateCoroutinesApi::class)
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -43,12 +45,16 @@ class LoginFragment : Fragment() {
         }
 
         view.findViewById<Button>(R.id.buttonLogin).setOnClickListener {
-            login()
+            GlobalScope.launch(Dispatchers.Main) {
+                login()
+            }
         }
         return view
     }
 
-    private fun login(){
+//    @OptIn(DelicateCoroutinesApi::class)
+    @OptIn(DelicateCoroutinesApi::class)
+    private suspend fun login(){
         val username = view.findViewById<EditText>(R.id.editTextUsernameL)
         val password = view.findViewById<EditText>(R.id.editTextPasswordL)
 
@@ -73,40 +79,44 @@ class LoginFragment : Fragment() {
                 .findViewById<ProgressBar>(R.id.progressBar)
             pb.visibility = View.VISIBLE
             var found : Boolean = false
-            usersCollection.get()
-                .addOnSuccessListener { querySnapshot ->
-                    for (document in querySnapshot.documents) {
-                        val user = document.toObject<User>()
-                        if (user != null) {
-                            if (user.username == username.text.toString().trim() &&
-                                user.password == password.text.toString().trim()) {
-                                Toast.makeText(
-                                    context,
-                                    "User Login Successfully",
-                                    Toast.LENGTH_SHORT)
-                                    .show()
-                                Log.d("mytag", "User Login Successfully")
-                                Navigation.findNavController(view).navigate(R.id.action_loginFragment_to_homeFragment)
-                                pb.visibility = View.GONE
-                                found = true
+            GlobalScope.launch (Dispatchers.IO) {
+                usersCollection.get()
+                    .addOnSuccessListener { querySnapshot ->
+                        for (document in querySnapshot.documents) {
+                            val user = document.toObject<User>()
+                            if (user != null) {
+                                if (user.username == username.text.toString().trim() &&
+                                    user.password == password.text.toString().trim()) {
+                                    Toast.makeText(
+                                        context,
+                                        "User Login Successfully",
+                                        Toast.LENGTH_SHORT
+                                    )
+                                        .show()
+                                    Log.d("mytag", "User Login Successfully")
+                                    Navigation.findNavController(view)
+                                        .navigate(R.id.action_loginFragment_to_homeFragment)
+                                    pb.visibility = View.GONE
+                                    found = true
+                                }
                                 break
                             }
                         }
+                        if (!found){
+                            Toast.makeText(
+                                context,
+                                "User Not Found",
+                                Toast.LENGTH_SHORT)
+                                .show()
+                            pb.visibility = View.GONE
+                        }
                     }
-                    if (!found){
-                        Toast.makeText(
-                            context,
-                            "User Not Found",
-                            Toast.LENGTH_SHORT)
+                    .addOnFailureListener {exception ->
+                        Toast.makeText(context, "Error: ${exception.message}", Toast.LENGTH_SHORT)
                             .show()
                         pb.visibility = View.GONE
                     }
-                }
-                .addOnFailureListener {exception ->
-                    Toast.makeText(context, "Error: ${exception.message}", Toast.LENGTH_SHORT)
-                        .show()
-                    pb.visibility = View.GONE
-                }
+            }
         }
 
         if (empty) {

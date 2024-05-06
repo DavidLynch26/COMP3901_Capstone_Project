@@ -84,7 +84,8 @@
         android:text="@string/currentLocation"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/buttonSearch" />
+        app:layout_constraintTop_toBottomOf="@+id/buttonSearch"
+        app:layout_constraintBottom_toTopOf="@+id/listViewBanks" />
 
     <ImageButton
         android:id="@+id/imageButtonRecentre"
@@ -100,26 +101,12 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:srcCompat="@drawable/location_crosshairs" />
 
-    <EditText
-        android:id="@+id/editTextBank"
+    <ListView
+        android:id="@+id/listViewBanks"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="5dp"
-        android:clickable="false"
-        android:editable="false"
-        app:layout_constraintBottom_toTopOf="@+id/textInputLayoutBanks"
-        app:layout_constraintEnd_toStartOf="@+id/guidelineMiddle"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <EditText
-        android:id="@+id/editTextDistance"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="5dp"
-        android:clickable="false"
-        android:editable="false"
-        app:layout_constraintBottom_toTopOf="@+id/textInputLayoutDistance"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="@+id/guidelineMiddle" />
+        app:layout_constraintStart_toStartOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

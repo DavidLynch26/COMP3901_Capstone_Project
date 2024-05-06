@@ -3,7 +3,7 @@ package com.example.easy_atm_mapper
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.location.Address
+import android.graphics.BitmapFactory
 import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
@@ -17,52 +17,83 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
-import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.example.easy_atm_mapper.models.Atm
+import com.example.easy_atm_mapper.models.MyLatLng
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.SupportMapFragment
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.PolylineOptions
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
+import com.google.firebase.firestore.toObject
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.google.maps.android.PolyUtil
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 class HomeFragment : Fragment() {
     private lateinit var view : View
-    private lateinit var mapFragment : SupportMapFragment
-    private lateinit var googleMap : GoogleMap
-    private lateinit var autocomplete : AutoCompleteTextView
-    private lateinit var fusedLocationProviderClient : FusedLocationProviderClient
-    private val locationRequest = LocationRequest.Builder(102, 5000).build()
-    private lateinit var locationCallback: LocationCallback
-    private lateinit var geocoder: Geocoder
-    private var userMarker: Marker? = null
+    private lateinit var drawerView : View
     private lateinit var apikey: String
+    private var exists: Boolean = false
+
+    private lateinit var bottomSheetDialog: BottomSheetDialog
+
+    private val db = Firebase.firestore
+    private val banksCollection = db.collection("banks")
+
+    private var userMarker: Marker? = null
+    private var clickedMarker: Marker? = null
+    private lateinit var geocoder: Geocoder
+    private lateinit var googleMap : GoogleMap
+    private lateinit var mapFragment : SupportMapFragment
+    private val markerList: MutableList<Triple<Marker,Atm, ImageView>> = mutableListOf()
+
+    private lateinit var autocomplete : AutoCompleteTextView
+
+    private lateinit var locationCallback: LocationCallback
+    private lateinit var fusedLocationProviderClient : FusedLocationProviderClient
+    private var interval = listOf(5000.toLong(), 1000.toLong())
+    private var priority = listOf(Priority.PRIORITY_BALANCED_POWER_ACCURACY, Priority.PRIORITY_HIGH_ACCURACY)
+    private var locationRequest = LocationRequest.Builder(priority[0], interval[0]).build()
+
 //    private lateinit var userAddress: Address
-    private val markerList: MutableList<Marker> = mutableListOf()
 
 //    private var fineLocPerm : String = android.Manifest.permission.ACCESS_FINE_LOCATION
 //    private var coarseLocPerm : String = android.Manifest.permission.ACCESS_COARSE_LOCATION
-    private val banks =
+    private val bankList =
         listOf(
             listOf("Bank of Nova Scotia", "First Caribbean", "Sagicor", "Jamaica National", "National Commercial Bank", "Jamaica Money Market Brokers"),
             listOf("BNS", "CIBC", "Sagicor", "JN", "NCB", "JMMB")
@@ -80,10 +111,25 @@ class HomeFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        apikey = MainActivity.bundle.getString("apikey").toString()
-//        Log.d("mytagapikey", apikey)
-
         view = inflater.inflate(R.layout.fragment_home, container, false)
+        drawerView = LayoutInflater.from(requireContext()).inflate(R.layout.bottom_sheet_layout, null)
+        bottomSheetDialog = BottomSheetDialog(requireContext())
+        bottomSheetDialog.setContentView(drawerView)
+
+//        val atm = Atm("id", "address2", MyLatLng(17.9,18.9), "busy", 0.0, "Working", "ncb", "image" )
+//        makeAtm(atm)
+//        val url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=17.9802057,-76.8747413&radius=20000&type=atm&key=AIzaSyDluFywbkMg_tJGraIbnd6ve7MzCX2vqww"
+//        GlobalScope.launch(Dispatchers.IO){
+//
+//            val response = URL(url).readText()
+//        }
+//        GlobalScope.launch(Dispatchers.IO){
+//            val callback: (String) -> Unit = {
+//                result ->
+//            }
+//            isAtm(atm, callback)
+//        }
+        apikey = MainActivity.bundle.getString("apikey").toString()
 
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 
@@ -112,7 +158,13 @@ class HomeFragment : Fragment() {
                 googleMap = it
                 userMarker = googleMap.addMarker(MarkerOptions()
                     .position(LatLng(0.0, 0.0))
-                    .title("Current Location"))
+                    .title("Current Location")
+                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)))
+                googleMap.setOnMarkerClickListener { marker->
+                    showAtm(marker)
+                    clickedMarker = marker
+                    true
+                }
             }
         }
 
@@ -133,6 +185,16 @@ class HomeFragment : Fragment() {
             }
         }
 
+        drawerView.findViewById<Button>(R.id.buttonStartNavigation).setOnClickListener{
+            locationRequest = LocationRequest.Builder(priority[1], interval[1]).build()
+            for(marker in markerList){
+                if (marker.first != clickedMarker){
+                    marker.first.remove()
+                }
+            }
+            getRoute(clickedMarker!!.position)
+        }
+
         view.findViewById<ImageButton>(R.id.imageButtonRecentre).setOnClickListener {
             if (userMarker != null) {
                 GlobalScope.launch(Dispatchers.Main) {
@@ -150,7 +212,7 @@ class HomeFragment : Fragment() {
         val distanceChoice = view.findViewById<AutoCompleteTextView>(R.id.autoCompleteTextViewDistance)
 
         autocomplete = bankChoice
-        var arrayadap = ArrayAdapter(requireContext(), R.layout.dropdown_banks, banks[0])
+        var arrayadap = ArrayAdapter(requireContext(), R.layout.dropdown_banks, bankList[0])
         autocomplete.setAdapter(arrayadap)
 
         autocomplete = distanceChoice
@@ -162,32 +224,97 @@ class HomeFragment : Fragment() {
             val selectDistance = distanceChoice.text.toString()
 
             fun isEmpty(): Boolean {
-                var empty: Boolean = false
+                var empty = false
                 if (selectBank == "Select Bank") {
-                    view.findViewById<EditText>(R.id.editTextBank).hint =
-                        "Please select a bank"
                     empty = true
-                } else {
-                    view.findViewById<EditText>(R.id.editTextBank).hint = ""
                 }
 
                 if (selectDistance == "Select Distance") {
-                    view.findViewById<EditText>(R.id.editTextDistance).hint =
-                        "Please select a distance"
                     empty = true
-                } else {
-                    view.findViewById<EditText>(R.id.editTextDistance).hint = ""
                 }
                 return empty
             }
 
             if (!isEmpty()) {
 //                getATMAddress(selectBank, selectDistance.toInt() * 1000)
-                getATMAddress(selectBank, selectDistance.toInt()*1000)
+                getAtmGM(selectBank, selectDistance.toInt()*1000)
             }
 //                getStreetAddress(userMarker!!.position)
         }
         return view
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun showAtm(marker: Marker) {
+        try{
+            lateinit var atm: Atm
+
+            for(curr in markerList){
+                if(marker == curr.first){
+                    atm = curr.second
+//                    drawerView.findViewById<ImageView>(R.id.imageViewAtm) = curr.third.image!!
+                    drawerView.findViewById<TextView>(R.id.textViewBusyness).text = atm.busyness
+                    drawerView.findViewById<TextView>(R.id.textViewAddress).text = atm.address
+                    drawerView.findViewById<TextView>(R.id.textViewWorking).text = atm.working
+                }
+            }
+            bottomSheetDialog.show()
+        } catch(e: Exception){
+            e.printStackTrace()
+        }
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private suspend fun getAtmImage(photoReference: String, image: ImageView): ImageView {
+        withContext(Dispatchers.IO){
+            val url = "https://maps.googleapis.com/maps/api/place/photo?" +
+                    "maxwidth=400&" +
+                    "photo_reference=$photoReference&" +
+                    "key=$apikey"
+
+            val photoData = URL(url).readText()
+            try{
+//                val decodedBytes = Base64.decode(photoData)
+//                val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+//                image.setImageBitmap(bitmap)
+//                Glide.with(requireContext())
+//                    .load(photoData)
+//                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+//                    .into(image)
+//                Log.d("mytagphoto", photoReference)
+
+            } catch(e: Exception){
+                e.printStackTrace()
+            }
+
+
+//            val gson = GsonBuilder().create()
+//            val root = gson.fromJson(response, JsonObject::class.java)
+        }
+        Log.d("mytagimage", image.toString())
+        return image
+
+    }private suspend fun getPhotoReference(placeId: String): String {
+        var photoReference = ""
+        withContext(Dispatchers.IO){
+            val url = "https://maps.googleapis.com/maps/api/place/details/json?" +
+                    "placeid=${placeId}&" +
+                    "key=$apikey"
+            val response = URL(url).readText()
+            val gson = GsonBuilder().create()
+            val root = gson.fromJson(response, JsonObject::class.java)
+
+            if(root.asJsonObject
+                    .get("result").asJsonObject
+                    .get("photos") != null){
+
+                photoReference = root.asJsonObject
+                    .get("result").asJsonObject
+                    .get("photos").asJsonArray[0].asJsonObject
+                    .get("photo_reference").asString
+            }
+        }
+        return photoReference
     }
 
 //    @SuppressLint("MissingPermission")
@@ -224,8 +351,11 @@ class HomeFragment : Fragment() {
     }
 
     private suspend fun updateUI(location: Location) {
+//        if (userMarker!!.position.latitude == 0.0 && userMarker!!.position.longitude == 0.0) {
+//            googleMap.animateCamera()
+//        }
         val latLng = LatLng(location.latitude, location.longitude)
-        Log.d("mytagmarker", userMarker?.position.toString())
+        Log.d("mytaguser", userMarker?.position.toString())
         withContext(Dispatchers.Main) {
             userMarker?.position = latLng
             view.findViewById<TextView>(R.id.textViewCurrLocation).text = userMarker?.position.toString()
@@ -233,131 +363,223 @@ class HomeFragment : Fragment() {
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-//    private fun getStreetAddress(latLng: LatLng) {
-//        var result = ""
-//        var urlString = ""
-//        var br: java.io.BufferedReader
-//        var url: URL
-//        GlobalScope.launch(Dispatchers.IO) {
-//            try {
-//                withContext(Dispatchers.Main) {
-//                    urlString = "https://maps.googleapis.com/maps/api/geocode/json?" +
-//                            "latlng=${userMarker!!.position.latitude},${userMarker!!.position.longitude}&" +
-//                            "key=$apikey"
-//                    url = URL(urlString)
-//                }
-//                val connection: HttpURLConnection = url.openConnection() as HttpURLConnection
-//                withContext(Dispatchers.Main) {
-//                    connection.requestMethod = "GET"
-//                    connection.doInput = true
-//                    withContext(Dispatchers.IO) {
-//                        connection.connect()
-//                        br = connection.inputStream.bufferedReader()
-//                        result = br.use { br.readText() }
-//                    }
-//                    connection.disconnect()
-//                    val gson = GsonBuilder().create()
-//                    val root = gson.fromJson(result, JsonObject::class.java)
-////                    Log.d("mytagplaces", root.getAsJsonObject().get("results").asJsonArray[0].asJsonObject.get("formatted_address").asString)
-//                }
-//            } catch (e: Exception) {
-//                Log.d("mytagplaceserror", e.toString())
-//                e.printStackTrace()
-//            }
-//        }
-////        for(result in getATMAddress(address, selectDistance.toInt()*1000)?.get("results")!!.asJsonArray) {
-////            val index = banks[0].indexOf(selectBank)
-////            val name = result.asJsonObject.get("name").asString
-////            val location = result.asJsonObject.get("geometry").asJsonObject.get("location").asJsonObject
-////            if(name.contains(banks[0][index]) || name.contains(banks[1][index])) {
-////                GlobalScope.launch(Dispatchers.Main) {
-////                    markerList.add(googleMap.addMarker(MarkerOptions().title(name).position(LatLng(location.get("lat").asDouble, location.get("lng").asDouble)))!!)
-////                    Log.d("mytagplacesname", name)
-////                    Log.d("mytagplaceslocation", location.toString())
-////                }
-////            }
-////        }
-//    }
-
-    private fun getATMAddress(selectBank: String, radius: Int) {
-        fun addAtm(result: JsonArray){
-            if (result.size() > 0) {
-                for(marker in markerList) {
-                    marker.remove()
-                }
-                for (r in result) {
-                    val index = banks[0].indexOf(selectBank)
-                    val name = r.asJsonObject.get("name").asString
-                    val location =
-                        r.asJsonObject.get("geometry").asJsonObject.get("location").asJsonObject
-                    if (name.contains(banks[0][index]) || name.contains(banks[1][index])) {
-                        Log.d("mytagbank", index.toString() + name + location)
-                        GlobalScope.launch(Dispatchers.Main) {
-                            markerList.add(
-                                googleMap.addMarker(
-                                    MarkerOptions().title(name).position(
-                                        LatLng(
-                                            location.get("lat").asDouble,
-                                            location.get("lng").asDouble
-                                        )
-                                    )
-                                )!!
-                            )
-//                            Log.d("mytaggmarker", googleMap.addMarker(
-//                                MarkerOptions().title(name).position(
-//                                    LatLng(
-//                                        location.get("lat").asDouble,
-//                                        location.get("lng").asDouble
-//                                    )
-//                                )
-//                            )!!::class.simpleName.toString()
-//                            )
-                        }
-                    }
-                }
-                val builder = LatLngBounds.Builder()
-                for (marker in markerList) {
-                    builder.include(marker.position)
-                }
-                googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(builder.build(), 100))
-            }
-        }
-        var result = ""
-        var urlString = ""
-        var br: java.io.BufferedReader
-        var url: URL
+    private fun getRoute(latLng: LatLng) {
+        val url = "https://maps.googleapis.com/maps/api/directions/json?" +
+                    "origin=${userMarker!!.position.latitude},${userMarker!!.position.longitude}&" +
+                    "destination=${latLng.latitude},${latLng.longitude}&" +
+                    "sensor=false&" +
+                    "mode=driving&" +
+                    "key=$apikey"
         GlobalScope.launch(Dispatchers.IO) {
             try {
-                withContext(Dispatchers.Main) {
-                    urlString = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" +
-                            "location=${userMarker!!.position.latitude},${userMarker!!.position.longitude}&" +
-                            "radius=$radius&" +
-                            "type=atm&" +
-                            "key=$apikey"
-                    url = URL(urlString)
-                }
-                val connection: HttpURLConnection = url.openConnection() as HttpURLConnection
-                withContext(Dispatchers.Main) {
-                    connection.requestMethod = "GET"
-                    connection.doInput = true
-                    withContext(Dispatchers.IO) {
-                        connection.connect()
-                        br = connection.inputStream.bufferedReader()
-                        result = br.use { br.readText() }
-                    }
-                }
-//            connection.connect()
-                connection.disconnect()
+                val response = URL(url).readText()
                 val gson = GsonBuilder().create()
-                val root = gson.fromJson(result, JsonObject::class.java)
-//                Log.d("mytagplaces", root.getAsJsonObject().get("results").asJsonArray.toString())
+                val root = gson.fromJson(response, JsonObject::class.java)
+
+                withContext(Dispatchers.Main) {
+                    val encodedPolyline = root.getAsJsonObject().get("routes").asJsonArray[0].asJsonObject.get("overview_polyline").asJsonObject.get("points").asString
+                    val decodedPolyline = PolyUtil.decode(encodedPolyline)
+                    val polyline = googleMap.addPolyline(PolylineOptions().addAll(decodedPolyline))
+                    val bounds = LatLngBounds.Builder().include(decodedPolyline.first())
+                        .include(decodedPolyline.last()).build()
+                    googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 100))
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun getAtmGM(selectBank: String, radius: Int) {
+        suspend fun addAtm(result: JsonArray){
+            try {
+                if (result.size() > 0) {
+                    val pb = (context as MainActivity)
+                        .findViewById<ProgressBar>(R.id.progressBar)
+                    pb.visibility = View.VISIBLE
+                    for (marker in markerList) {
+                        marker.first.remove()
+                    }
+                    markerList.clear()
+                    for (r in result) {
+                        val index = bankList[0].indexOf(selectBank)
+                        val name = r.asJsonObject.get("name").asString
+                        if (name.contains(bankList[0][index]) || name.contains(bankList[1][index])) {
+                            val id = r.asJsonObject.get("place_id").asString
+                            val isAtm = isAtm(id, selectBank)
+
+                            var atm: Atm
+
+                            if (isAtm) {
+                                atm = getAtmDB(id, selectBank)
+                            } else {
+                                val location = LatLng(
+                                    r.asJsonObject.get("geometry").asJsonObject.get("location").asJsonObject.get(
+                                        "lat"
+                                    ).asDouble,
+                                    r.asJsonObject.get("geometry").asJsonObject.get("location").asJsonObject.get(
+                                        "lng"
+                                    ).asDouble,
+                                )
+
+                                val responseAd = GlobalScope.async {
+                                    getAtmAddress(location)
+                                }
+                                val address = responseAd.await()
+
+                                val responseReference = GlobalScope.async {
+                                    getPhotoReference(id)
+                                }
+
+                                val photoReference = responseReference.await()
+
+                                atm = Atm(
+                                    id,
+                                    address,
+                                    MyLatLng(location.latitude, location.longitude),
+                                    "Not Busy",
+                                    0.0,
+                                    "Working",
+                                    selectBank,
+                                    photoReference
+                                )
+                                makeAtm(atm)
+                            }
+//                            GlobalScope.launch(Dispatchers.Main) {
+                                markerList.add(
+                                    Triple(
+                                        googleMap.addMarker(
+                                            MarkerOptions()
+                                                .title (name)
+                                                .position(
+                                                    LatLng(
+                                                        atm.location!!.latitude,
+                                                        atm.location!!.longitude
+                                                    )
+                                                )
+                                                .snippet(atm.address)
+                                                .icon(BitmapDescriptorFactory.fromResource(R.drawable.atm_icon))
+                                        )!!, atm, ImageView(requireContext())
+                                    )
+                                )
+//                            }
+
+                            Log.d("mytagatm", markerList.toString())
+
+//                            val responseImage = GlobalScope.async {
+//                                getAtmImage(atm.photoReference!!, markerList.last().third)
+//                            }
+//
+//                            val image = responseImage.await()
+//                            Log.d("mytagphoto", image.toString())
+                        }
+                    }
+                    if (markerList != null) {
+                        val builder = LatLngBounds.Builder()
+                        for (marker in markerList) {
+                            Log.d("mytagmarkers", marker.toString())
+                            val location =
+                                LatLng(
+                                    marker.second.location!!.latitude,
+                                    marker.second.location!!.longitude
+                                )
+                            builder.include(location)
+                        }
+                        googleMap.animateCamera(
+                            CameraUpdateFactory.newLatLngBounds(
+                                builder.build(),
+                                100
+                            )
+                        )
+                    }
+                    pb.visibility = View.GONE
+                }
+            } catch(e: Exception){
+                e.printStackTrace()
+            }
+        }
+        val url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" +
+                "location=${userMarker!!.position.latitude},${userMarker!!.position.longitude}&" +
+                "radius=${radius}&" +
+                "type=atm&" +
+                "key=$apikey"
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                val response = URL(url).readText()
+                val gson = GsonBuilder().create()
+                val root = gson.fromJson(response, JsonObject::class.java)
                 withContext(Dispatchers.Main) {
                     addAtm(root.getAsJsonObject().get("results").asJsonArray)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                Log.d("mytagplaceserror", e.toString())
             }
         }
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    fun makeAtm(atm: Atm){
+        GlobalScope.launch(Dispatchers.IO) {
+            banksCollection.document(atm.bank!!).collection("atms").document()
+                .set(atm)
+                .addOnSuccessListener {
+                    Log.d("mytagCreatedAtm", atm.toString())
+                }
+                .addOnFailureListener{
+
+                }
+        }
+    }
+
+    private suspend fun isAtm(id: String, bank: String): Boolean{
+        var exists = false
+        withContext(Dispatchers.IO){
+            banksCollection.document(bank).collection("atms").get()
+                .addOnSuccessListener { querySnapshot ->
+                    for(document in querySnapshot.documents){
+                        val found = document.toObject<Atm>()
+                        if (found != null) {
+                            if(id == found.id){
+                                exists = true
+                            }
+                        }
+                    }
+                }.await()
+        }
+        return exists
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    suspend fun getAtmDB(id: String, bank: String): Atm{
+        var atm = Atm()
+        withContext(Dispatchers.IO){
+            banksCollection.document(bank).collection("atms").get()
+                .addOnSuccessListener { querySnapshot ->
+                    for(document in querySnapshot.documents){
+                        val found = document.toObject<Atm>()
+                        if(found != null){
+                            if(id == found.id){
+                                atm = found
+                            }
+                        }
+                    }
+                }.await()
+        }
+        return atm
+    }
+
+    private suspend fun getAtmAddress(latlng: LatLng): String{
+        var address = ""
+        val url = "https://maps.googleapis.com/maps/api/geocode/json?" +
+                "latlng=${latlng.latitude},${latlng.longitude}&" +
+                "key=$apikey"
+        withContext(Dispatchers.IO){
+            val response = URL(url).readText()
+            val gson = GsonBuilder().create()
+            val root = gson.fromJson(response, JsonObject::class.java)
+            address = root.getAsJsonArray("results")[0].asJsonObject.get("formatted_address").asString
+        }
+        return address
     }
 }
