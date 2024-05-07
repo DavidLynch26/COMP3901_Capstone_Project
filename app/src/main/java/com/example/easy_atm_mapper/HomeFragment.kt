@@ -3,7 +3,6 @@ package com.example.easy_atm_mapper
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
@@ -23,8 +22,6 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
-import com.bumptech.glide.Glide
-import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.example.easy_atm_mapper.models.Atm
 import com.example.easy_atm_mapper.models.MyLatLng
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -41,6 +38,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.firebase.Firebase
@@ -55,12 +53,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import java.net.URL
 import java.util.Locale
-import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 class HomeFragment : Fragment() {
@@ -68,12 +65,14 @@ class HomeFragment : Fragment() {
     private lateinit var drawerView : View
     private lateinit var apikey: String
     private var exists: Boolean = false
+    private var navigation: Boolean = false
 
     private lateinit var bottomSheetDialog: BottomSheetDialog
 
     private val db = Firebase.firestore
     private val banksCollection = db.collection("banks")
 
+    private lateinit var polyline: Polyline
     private var userMarker: Marker? = null
     private var clickedMarker: Marker? = null
     private lateinit var geocoder: Geocoder
@@ -186,13 +185,11 @@ class HomeFragment : Fragment() {
         }
 
         drawerView.findViewById<Button>(R.id.buttonStartNavigation).setOnClickListener{
-            locationRequest = LocationRequest.Builder(priority[1], interval[1]).build()
-            for(marker in markerList){
-                if (marker.first != clickedMarker){
-                    marker.first.remove()
-                }
+            if(!navigation){
+                startNavigation()
+            } else{
+                stopNavigation()
             }
-            getRoute(clickedMarker!!.position)
         }
 
         view.findViewById<ImageButton>(R.id.imageButtonRecentre).setOnClickListener {
@@ -358,6 +355,11 @@ class HomeFragment : Fragment() {
         Log.d("mytaguser", userMarker?.position.toString())
         withContext(Dispatchers.Main) {
             userMarker?.position = latLng
+
+            if (navigation){
+                getRoute(clickedMarker!!.position)
+            }
+
             view.findViewById<TextView>(R.id.textViewCurrLocation).text = userMarker?.position.toString()
         }
     }
@@ -379,7 +381,7 @@ class HomeFragment : Fragment() {
                 withContext(Dispatchers.Main) {
                     val encodedPolyline = root.getAsJsonObject().get("routes").asJsonArray[0].asJsonObject.get("overview_polyline").asJsonObject.get("points").asString
                     val decodedPolyline = PolyUtil.decode(encodedPolyline)
-                    val polyline = googleMap.addPolyline(PolylineOptions().addAll(decodedPolyline))
+                    polyline = googleMap.addPolyline(PolylineOptions().addAll(decodedPolyline))
                     val bounds = LatLngBounds.Builder().include(decodedPolyline.first())
                         .include(decodedPolyline.last()).build()
                     googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 100))
@@ -405,6 +407,8 @@ class HomeFragment : Fragment() {
                     for (r in result) {
                         val index = bankList[0].indexOf(selectBank)
                         val name = r.asJsonObject.get("name").asString
+//                        Log.d("mytagfound", r.asJsonObject.toString())
+//                        Log.d("mytagfound", r.asJsonObject.get("vicinity").asString)
                         if (name.contains(bankList[0][index]) || name.contains(bankList[1][index])) {
                             val id = r.asJsonObject.get("place_id").asString
                             val isAtm = isAtm(id, selectBank)
@@ -446,24 +450,8 @@ class HomeFragment : Fragment() {
                                 )
                                 makeAtm(atm)
                             }
-//                            GlobalScope.launch(Dispatchers.Main) {
-                                markerList.add(
-                                    Triple(
-                                        googleMap.addMarker(
-                                            MarkerOptions()
-                                                .title (name)
-                                                .position(
-                                                    LatLng(
-                                                        atm.location!!.latitude,
-                                                        atm.location!!.longitude
-                                                    )
-                                                )
-                                                .snippet(atm.address)
-                                                .icon(BitmapDescriptorFactory.fromResource(R.drawable.atm_icon))
-                                        )!!, atm, ImageView(requireContext())
-                                    )
-                                )
-//                            }
+
+                            addAtmToMap(name, atm)
 
                             Log.d("mytagatm", markerList.toString())
 
@@ -499,18 +487,40 @@ class HomeFragment : Fragment() {
                 e.printStackTrace()
             }
         }
-        val url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" +
+        var url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" +
                 "location=${userMarker!!.position.latitude},${userMarker!!.position.longitude}&" +
                 "radius=${radius}&" +
                 "type=atm&" +
                 "key=$apikey"
+        Log.d("mytagurl", url)
         GlobalScope.launch(Dispatchers.IO) {
             try {
-                val response = URL(url).readText()
-                val gson = GsonBuilder().create()
-                val root = gson.fromJson(response, JsonObject::class.java)
+                var response = URL(url).readText()
+
+                var gson = GsonBuilder().create()
+                var root = gson.fromJson(response, JsonObject::class.java)
+                var jsonArray = root.getAsJsonObject().get("results").asJsonArray
+
+                var nextPageToken = root.asJsonObject.get("next_page_token")
+
+                Log.d("mytagarray", jsonArray.toString())
+                while (nextPageToken != null) {
+                    Thread.sleep(2000)
+                    url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" +
+                            "pagetoken=${nextPageToken.asString}&" +
+                            "key=$apikey"
+
+                    response = URL(url).readText()
+                    gson = GsonBuilder().create()
+                    root = gson.fromJson(response, JsonObject::class.java)
+
+                    jsonArray.addAll(root.getAsJsonObject().get("results").asJsonArray)
+
+                    nextPageToken = root.asJsonObject.get("next_page_token")
+                }
+
                 withContext(Dispatchers.Main) {
-                    addAtm(root.getAsJsonObject().get("results").asJsonArray)
+                    addAtm(jsonArray)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -581,5 +591,59 @@ class HomeFragment : Fragment() {
             address = root.getAsJsonArray("results")[0].asJsonObject.get("formatted_address").asString
         }
         return address
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun stopNavigation(){
+        navigation = !navigation
+
+        locationRequest = LocationRequest.Builder(priority[0], interval[0]).build()
+
+        fusedLocationProviderClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+
+
+        polyline.remove()
+
+        drawerView.findViewById<Button>(R.id.buttonStartNavigation).text = "Start Navigation"
+
+//        fusedLocationProviderClient.removeLocationUpdates(locationCallback)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startNavigation(){
+        navigation = !navigation
+
+        locationRequest = LocationRequest.Builder(priority[1], interval[1]).build()
+
+        fusedLocationProviderClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+
+        for(marker in markerList){
+            if (marker.first != clickedMarker){
+                marker.first.remove()
+            }
+        }
+        getRoute(clickedMarker!!.position)
+
+        drawerView.findViewById<Button>(R.id.buttonStartNavigation).text = "Stop Navigation"
+//        drawerView.findViewById<Button>(R.id.buttonStartNavigation).text = "Stop Navigation"
+    }
+
+    private fun addAtmToMap(name: String, atm: Atm){
+        markerList.add(
+            Triple(
+                googleMap.addMarker(
+                    MarkerOptions()
+                        .title (name)
+                        .position(
+                            LatLng(
+                                atm.location!!.latitude,
+                                atm.location!!.longitude
+                            )
+                        )
+                        .snippet(atm.address)
+                        .icon(BitmapDescriptorFactory.fromResource(R.drawable.atm_icon))
+                )!!, atm, ImageView(requireContext())
+            )
+        )
     }
 }
