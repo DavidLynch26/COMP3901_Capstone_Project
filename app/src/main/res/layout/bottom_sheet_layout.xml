@@ -33,19 +33,10 @@
             app:layout_constraintStart_toEndOf="@+id/imageViewAtm"
             app:layout_constraintTop_toTopOf="@+id/imageViewAtm" />
 
-        <TextView
-            android:id="@+id/textViewBusyness"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="10dp"
-            android:text="Busyness"
-            app:layout_constraintBottom_toBottomOf="@+id/textViewWorking"
-            app:layout_constraintEnd_toEndOf="parent" />
-
         <ImageView
             android:id="@+id/imageViewAtm"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="106dp"
+            android:layout_height="101dp"
             android:layout_marginStart="10dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -60,5 +51,14 @@
             android:text="Working"
             app:layout_constraintBottom_toBottomOf="@+id/imageViewAtm"
             app:layout_constraintStart_toEndOf="@+id/imageViewAtm" />
+
+        <TextView
+            android:id="@+id/textViewWaitTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Wait Time"
+            app:layout_constraintBottom_toTopOf="@+id/textViewWorking"
+            app:layout_constraintStart_toStartOf="@+id/textViewAddress"
+            app:layout_constraintTop_toBottomOf="@+id/textViewAddress" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

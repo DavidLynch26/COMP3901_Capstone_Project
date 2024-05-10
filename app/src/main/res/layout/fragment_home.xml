@@ -65,7 +65,8 @@
         android:text="@string/search"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/map" />
+        app:layout_constraintTop_toBottomOf="@+id/map"
+        android:backgroundTint="@color/mapper_green"/>
 
     <androidx.constraintlayout.widget.Guideline
         android:id="@+id/guidelineMiddle"
@@ -82,10 +83,10 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:text="@string/currentLocation"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/buttonSearch"
-        app:layout_constraintBottom_toTopOf="@+id/listViewBanks" />
+        app:layout_constraintTop_toBottomOf="@+id/buttonSearch" />
 
     <ImageButton
         android:id="@+id/imageButtonRecentre"
@@ -101,12 +102,12 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:srcCompat="@drawable/location_crosshairs" />
 
-    <ListView
-        android:id="@+id/listViewBanks"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+<!--    <ListView-->
+<!--        android:id="@+id/listViewBanks"-->
+<!--        android:layout_width="wrap_content"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        app:layout_constraintBottom_toBottomOf="parent"-->
+<!--        app:layout_constraintEnd_toEndOf="parent"-->
+<!--        app:layout_constraintStart_toStartOf="parent" />-->
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -59,6 +59,7 @@ dependencies {
     implementation(libs.android.maps.utils)
     implementation(libs.places)
     implementation(libs.glide)
+    implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

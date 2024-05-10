@@ -7,6 +7,7 @@ import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
 import android.os.Bundle
+import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
@@ -20,10 +21,12 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import com.example.easy_atm_mapper.models.Atm
 import com.example.easy_atm_mapper.models.MyLatLng
+import com.example.easy_atm_mapper.models.UserComment
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -55,8 +58,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import java.net.URL
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -85,7 +89,7 @@ class HomeFragment : Fragment() {
     private lateinit var locationCallback: LocationCallback
     private lateinit var fusedLocationProviderClient : FusedLocationProviderClient
     private var interval = listOf(5000.toLong(), 1000.toLong())
-    private var priority = listOf(Priority.PRIORITY_BALANCED_POWER_ACCURACY, Priority.PRIORITY_HIGH_ACCURACY)
+    private var priority = listOf(Priority.PRIORITY_HIGH_ACCURACY, Priority.PRIORITY_HIGH_ACCURACY)
     private var locationRequest = LocationRequest.Builder(priority[0], interval[0]).build()
 
 //    private lateinit var userAddress: Address
@@ -97,7 +101,7 @@ class HomeFragment : Fragment() {
             listOf("Bank of Nova Scotia", "First Caribbean", "Sagicor", "Jamaica National", "National Commercial Bank", "Jamaica Money Market Brokers"),
             listOf("BNS", "CIBC", "Sagicor", "JN", "NCB", "JMMB")
         )
-    private val distances = listOf("1","2", "5", "10", "15", "20")
+    private val distances = listOf("1 km","2 km", "5 km", "10 km", "15 km", "20 km")
 
     private lateinit var locationManager: LocationManager
     private var isLocationEnabled: Boolean = false
@@ -115,19 +119,6 @@ class HomeFragment : Fragment() {
         bottomSheetDialog = BottomSheetDialog(requireContext())
         bottomSheetDialog.setContentView(drawerView)
 
-//        val atm = Atm("id", "address2", MyLatLng(17.9,18.9), "busy", 0.0, "Working", "ncb", "image" )
-//        makeAtm(atm)
-//        val url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=17.9802057,-76.8747413&radius=20000&type=atm&key=AIzaSyDluFywbkMg_tJGraIbnd6ve7MzCX2vqww"
-//        GlobalScope.launch(Dispatchers.IO){
-//
-//            val response = URL(url).readText()
-//        }
-//        GlobalScope.launch(Dispatchers.IO){
-//            val callback: (String) -> Unit = {
-//                result ->
-//            }
-//            isAtm(atm, callback)
-//        }
         apikey = MainActivity.bundle.getString("apikey").toString()
 
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(requireActivity())
@@ -160,8 +151,8 @@ class HomeFragment : Fragment() {
                     .title("Current Location")
                     .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)))
                 googleMap.setOnMarkerClickListener { marker->
-                    showAtm(marker)
                     clickedMarker = marker
+                    showAtm(marker)
                     true
                 }
             }
@@ -185,10 +176,16 @@ class HomeFragment : Fragment() {
         }
 
         drawerView.findViewById<Button>(R.id.buttonStartNavigation).setOnClickListener{
-            if(!navigation){
-                startNavigation()
-            } else{
-                stopNavigation()
+            try{
+                GlobalScope.launch(Dispatchers.Main){
+                    if(!navigation){
+                        startNavigation()
+                    } else{
+                        stopNavigation()
+                    }
+                }
+            }catch(e: Exception){
+               e.printStackTrace()
             }
         }
 
@@ -218,7 +215,7 @@ class HomeFragment : Fragment() {
 
         view.findViewById<Button>(R.id.buttonSearch).setOnClickListener {
             val selectBank = bankChoice.text.toString()
-            val selectDistance = distanceChoice.text.toString()
+            val selectDistance = distanceChoice.text.split(" ")[0]
 
             fun isEmpty(): Boolean {
                 var empty = false
@@ -233,15 +230,12 @@ class HomeFragment : Fragment() {
             }
 
             if (!isEmpty()) {
-//                getATMAddress(selectBank, selectDistance.toInt() * 1000)
                 getAtmGM(selectBank, selectDistance.toInt()*1000)
             }
-//                getStreetAddress(userMarker!!.position)
         }
         return view
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
     private fun showAtm(marker: Marker) {
         try{
             lateinit var atm: Atm
@@ -249,10 +243,9 @@ class HomeFragment : Fragment() {
             for(curr in markerList){
                 if(marker == curr.first){
                     atm = curr.second
-//                    drawerView.findViewById<ImageView>(R.id.imageViewAtm) = curr.third.image!!
-                    drawerView.findViewById<TextView>(R.id.textViewBusyness).text = atm.busyness
-                    drawerView.findViewById<TextView>(R.id.textViewAddress).text = atm.address
-                    drawerView.findViewById<TextView>(R.id.textViewWorking).text = atm.working
+                    drawerView.findViewById<TextView>(R.id.textViewAddress).text = "Address: ${atm.address}"
+                    drawerView.findViewById<TextView>(R.id.textViewWorking).text = "Status: ${atm.working}"
+                    drawerView.findViewById<TextView>(R.id.textViewWaitTime).text = "Wait Time ${atm.waitTime.toString()} mins"
                 }
             }
             bottomSheetDialog.show()
@@ -261,7 +254,6 @@ class HomeFragment : Fragment() {
         }
     }
 
-    @OptIn(ExperimentalEncodingApi::class)
     private suspend fun getAtmImage(photoReference: String, image: ImageView): ImageView {
         withContext(Dispatchers.IO){
             val url = "https://maps.googleapis.com/maps/api/place/photo?" +
@@ -314,20 +306,6 @@ class HomeFragment : Fragment() {
         return photoReference
     }
 
-//    @SuppressLint("MissingPermission")
-//    fun getLocation() {
-//        fusedLocationProviderClient.lastLocation.addOnSuccessListener {
-//            location: Location? ->
-//            if (location != null) {
-////                if (userMarker != null) {
-////                    googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(userMarker.position, 15f))
-////                }
-//                updateUI(location)
-//            }
-//        }
-////        Log.d("mytagmarker", marker.toString())
-//    }
-
     override fun onPause() {
         super.onPause()
         stopLocationUpdates()
@@ -347,51 +325,159 @@ class HomeFragment : Fragment() {
         fusedLocationProviderClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     private suspend fun updateUI(location: Location) {
-//        if (userMarker!!.position.latitude == 0.0 && userMarker!!.position.longitude == 0.0) {
-//            googleMap.animateCamera()
-//        }
         val latLng = LatLng(location.latitude, location.longitude)
-        Log.d("mytaguser", userMarker?.position.toString())
-        withContext(Dispatchers.Main) {
-            userMarker?.position = latLng
+        userMarker?.position = latLng
 
-            if (navigation){
-                getRoute(clickedMarker!!.position)
+        if (navigation){
+            try{
+                withContext(Dispatchers.Main) {
+                    val root = getRoute(clickedMarker!!.position)
+                    val encodedPolyline = root.getAsJsonObject().get("routes").asJsonArray[0].asJsonObject.get("overview_polyline").asJsonObject.get("points").asString
+                    val decodedPolyline = PolyUtil.decode(encodedPolyline)
+
+                    withContext(Dispatchers.Main) {
+                        polyline = googleMap.addPolyline(PolylineOptions().addAll(decodedPolyline))
+                        polyline.remove()
+                        polyline = googleMap.addPolyline(PolylineOptions().addAll(decodedPolyline))
+//                        val bounds = LatLngBounds.Builder().include(decodedPolyline.first())
+//                            .include(decodedPolyline.last()).build()
+//                        googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 100))
+                    }
+
+                    val distance = root.getAsJsonObject().get("routes").asJsonArray[0].asJsonObject.get("legs").asJsonArray[0].asJsonObject.get("distance").asJsonObject.get("value").asDouble
+
+                    if (distance <= 10.0) {
+                        val arrivalTime = LocalDateTime.now()
+                        stopNavigation()
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                requireContext(),
+                                "You have reached your destination",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            val myRunnable = Runnable {
+                                // The event has occurred
+                                var rAtm = Atm()
+                                for(marker in markerList) {
+                                    if (marker.first == clickedMarker) {
+                                        rAtm = marker.second
+                                    }
+                                }
+                                val rDialog: AlertDialog = AlertDialog.Builder(requireContext())
+                                    .setTitle("Atm Details")
+                                    .setMessage("Was the ${rAtm.bank} ATM on ${rAtm.address} working?")
+                                    .setPositiveButton("Yes") { _, _ ->
+                                        val userComment = UserComment(
+                                            ChronoUnit.MINUTES.between(
+                                            arrivalTime,
+                                            LocalDateTime.now()),
+                                            "Working"
+                                        )
+                                        GlobalScope.launch(Dispatchers.IO){
+                                            makeComment(rAtm, userComment)
+                                        }
+                                    }
+                                    .setNegativeButton("No") { rDialog, _ ->
+                                        val userComment = UserComment(
+                                            ChronoUnit.MINUTES.between(
+                                                arrivalTime,
+                                                LocalDateTime.now()),
+                                            "Not Working"
+                                        )
+                                        GlobalScope.launch(Dispatchers.IO){
+                                            makeComment(rAtm, userComment)
+                                        }
+                                        rDialog.dismiss()
+                                    }
+                                    .create()
+
+                                rDialog.show()
+                            }
+                            val handler = Handler(Looper.getMainLooper())
+                            withContext(Dispatchers.IO) {
+                                handler.postDelayed({
+                                    myRunnable.run()
+                                }, 5000)
+                            }
+                        }
+                    }
+                }
+            }catch(e: Exception){
+                e.printStackTrace()
             }
-
+        }
+        withContext(Dispatchers.Main) {
             view.findViewById<TextView>(R.id.textViewCurrLocation).text = userMarker?.position.toString()
         }
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
-    private fun getRoute(latLng: LatLng) {
-        val url = "https://maps.googleapis.com/maps/api/directions/json?" +
-                    "origin=${userMarker!!.position.latitude},${userMarker!!.position.longitude}&" +
-                    "destination=${latLng.latitude},${latLng.longitude}&" +
-                    "sensor=false&" +
-                    "mode=driving&" +
-                    "key=$apikey"
-        GlobalScope.launch(Dispatchers.IO) {
-            try {
-                val response = URL(url).readText()
-                val gson = GsonBuilder().create()
-                val root = gson.fromJson(response, JsonObject::class.java)
+    private suspend fun getRoute(latLng: LatLng): JsonObject {
+        val url: String = "https://maps.googleapis.com/maps/api/directions/json?" +
+                "origin=${userMarker!!.position.latitude},${userMarker!!.position.longitude}&" +
+                "destination=${latLng.latitude},${latLng.longitude}&" +
+                "sensor=false&" +
+                "mode=walking&" +
+                "key=$apikey"
 
-                withContext(Dispatchers.Main) {
-                    val encodedPolyline = root.getAsJsonObject().get("routes").asJsonArray[0].asJsonObject.get("overview_polyline").asJsonObject.get("points").asString
-                    val decodedPolyline = PolyUtil.decode(encodedPolyline)
-                    polyline = googleMap.addPolyline(PolylineOptions().addAll(decodedPolyline))
-                    val bounds = LatLngBounds.Builder().include(decodedPolyline.first())
-                        .include(decodedPolyline.last()).build()
-                    googleMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 100))
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+        return withContext(Dispatchers.IO){
+            val response = URL(url).readText()
+            val gson = GsonBuilder().create()
+            val root = gson.fromJson(response, JsonObject::class.java)
+            root
         }
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
+    private suspend fun makeComment(atm: Atm, userComment: UserComment){
+        withContext(Dispatchers.IO) {
+            banksCollection.document(atm.bank!!).collection("atms").document(atm.id!!).collection("comments").document()
+                .set(userComment)
+                .addOnSuccessListener {
+                    GlobalScope.launch(Dispatchers.IO) {
+                        updateAtm(atm, userComment)
+                    }
+                }
+        }
+    }
+    private suspend fun updateAtm(atm: Atm, userComment: UserComment){
+        var working: Pair<Int, Int> = Pair(0,0) // working, not working
+        var average: Long
+        var sum: Double = 0.0
+        withContext(Dispatchers.IO){
+            banksCollection.document(atm.bank!!).collection("atms").document(atm.id!!).collection("comments")
+                .get()
+                .addOnSuccessListener { querySnapshot ->
+                    for(document in querySnapshot.documents) {
+                        Log.d("mytagdocument", document.toString())
+                        val comment = document.toObject<UserComment>()
+                        if (comment != null) {
+                            if (comment.working == "Working") {
+                                working = Pair(working.first + 1, 0)
+                            } else {
+                                working = Pair(0, working.second + 1)
+                            }
+                            sum += comment.timeTaken!!
+                        }
+                    }
+
+                    Log.d("mytagsum", sum.toString())
+                    Log.d("mytagworking", if(working.first > working.second) "Working" else "Not Working")
+                    average = (sum /querySnapshot.size()).toLong()
+
+                    banksCollection.document(atm.bank).collection("atms").document(atm.id)
+                        .update(
+                            "waitTime", average,
+                            "working", if(working.first > working.second) "Working" else "Not Working"
+                        )
+                    Log.d("mytagavg", average.toString())
+                }
+                .addOnFailureListener {
+                    Log.d("mytagcomment", it.toString())
+                }
+        }
+    }
     @OptIn(DelicateCoroutinesApi::class)
     private fun getAtmGM(selectBank: String, radius: Int) {
         suspend fun addAtm(result: JsonArray){
@@ -399,7 +485,9 @@ class HomeFragment : Fragment() {
                 if (result.size() > 0) {
                     val pb = (context as MainActivity)
                         .findViewById<ProgressBar>(R.id.progressBar)
-                    pb.visibility = View.VISIBLE
+                    withContext(Dispatchers.Main) {
+                        pb.visibility = View.VISIBLE
+                    }
                     for (marker in markerList) {
                         marker.first.remove()
                     }
@@ -407,8 +495,6 @@ class HomeFragment : Fragment() {
                     for (r in result) {
                         val index = bankList[0].indexOf(selectBank)
                         val name = r.asJsonObject.get("name").asString
-//                        Log.d("mytagfound", r.asJsonObject.toString())
-//                        Log.d("mytagfound", r.asJsonObject.get("vicinity").asString)
                         if (name.contains(bankList[0][index]) || name.contains(bankList[1][index])) {
                             val id = r.asJsonObject.get("place_id").asString
                             val isAtm = isAtm(id, selectBank)
@@ -451,9 +537,12 @@ class HomeFragment : Fragment() {
                                 makeAtm(atm)
                             }
 
-                            addAtmToMap(name, atm)
+                            val responseMarker = GlobalScope.launch{
+                                addAtmToMap(name, atm)
+                            }
 
-                            Log.d("mytagatm", markerList.toString())
+                            responseMarker.join()
+
 
 //                            val responseImage = GlobalScope.async {
 //                                getAtmImage(atm.photoReference!!, markerList.last().third)
@@ -463,10 +552,9 @@ class HomeFragment : Fragment() {
 //                            Log.d("mytagphoto", image.toString())
                         }
                     }
-                    if (markerList != null) {
+                    if (markerList.isNotEmpty()) {
                         val builder = LatLngBounds.Builder()
                         for (marker in markerList) {
-                            Log.d("mytagmarkers", marker.toString())
                             val location =
                                 LatLng(
                                     marker.second.location!!.latitude,
@@ -480,8 +568,16 @@ class HomeFragment : Fragment() {
                                 100
                             )
                         )
+                    } else {
+                        Toast.makeText(
+                            requireContext(),
+                            "No Atms Found",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
-                    pb.visibility = View.GONE
+                    withContext(Dispatchers.Main) {
+                        pb.visibility = View.GONE
+                    }
                 }
             } catch(e: Exception){
                 e.printStackTrace()
@@ -492,7 +588,6 @@ class HomeFragment : Fragment() {
                 "radius=${radius}&" +
                 "type=atm&" +
                 "key=$apikey"
-        Log.d("mytagurl", url)
         GlobalScope.launch(Dispatchers.IO) {
             try {
                 var response = URL(url).readText()
@@ -503,7 +598,6 @@ class HomeFragment : Fragment() {
 
                 var nextPageToken = root.asJsonObject.get("next_page_token")
 
-                Log.d("mytagarray", jsonArray.toString())
                 while (nextPageToken != null) {
                     Thread.sleep(2000)
                     url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" +
@@ -531,7 +625,7 @@ class HomeFragment : Fragment() {
     @OptIn(DelicateCoroutinesApi::class)
     fun makeAtm(atm: Atm){
         GlobalScope.launch(Dispatchers.IO) {
-            banksCollection.document(atm.bank!!).collection("atms").document()
+            banksCollection.document(atm.bank!!).collection("atms").document(atm.id!!)
                 .set(atm)
                 .addOnSuccessListener {
                     Log.d("mytagCreatedAtm", atm.toString())
@@ -560,8 +654,7 @@ class HomeFragment : Fragment() {
         return exists
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
-    suspend fun getAtmDB(id: String, bank: String): Atm{
+    private suspend fun getAtmDB(id: String, bank: String): Atm{
         var atm = Atm()
         withContext(Dispatchers.IO){
             banksCollection.document(bank).collection("atms").get()
@@ -594,23 +687,27 @@ class HomeFragment : Fragment() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun stopNavigation(){
+    private suspend fun stopNavigation(){
         navigation = !navigation
 
         locationRequest = LocationRequest.Builder(priority[0], interval[0]).build()
 
         fusedLocationProviderClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
 
-
         polyline.remove()
 
         drawerView.findViewById<Button>(R.id.buttonStartNavigation).text = "Start Navigation"
+
+//        getAtmGM(
+//            view.findViewById<AutoCompleteTextView>(R.id.autoCompleteTextViewBanks).text.toString(),
+//            view.findViewById<AutoCompleteTextView>(R.id.autoCompleteTextViewDistance).text.toString().toInt()*1000
+//        )
 
 //        fusedLocationProviderClient.removeLocationUpdates(locationCallback)
     }
 
     @SuppressLint("MissingPermission")
-    private fun startNavigation(){
+    private suspend fun startNavigation(){
         navigation = !navigation
 
         locationRequest = LocationRequest.Builder(priority[1], interval[1]).build()
@@ -622,28 +719,28 @@ class HomeFragment : Fragment() {
                 marker.first.remove()
             }
         }
-        getRoute(clickedMarker!!.position)
-
         drawerView.findViewById<Button>(R.id.buttonStartNavigation).text = "Stop Navigation"
-//        drawerView.findViewById<Button>(R.id.buttonStartNavigation).text = "Stop Navigation"
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     private fun addAtmToMap(name: String, atm: Atm){
-        markerList.add(
-            Triple(
-                googleMap.addMarker(
-                    MarkerOptions()
-                        .title (name)
-                        .position(
-                            LatLng(
-                                atm.location!!.latitude,
-                                atm.location!!.longitude
+        GlobalScope.launch(Dispatchers.Main){
+            markerList.add(
+                Triple(
+                    googleMap.addMarker(
+                        MarkerOptions()
+                            .title (name)
+                            .position(
+                                LatLng(
+                                    atm.location!!.latitude,
+                                    atm.location.longitude
+                                )
                             )
-                        )
-                        .snippet(atm.address)
-                        .icon(BitmapDescriptorFactory.fromResource(R.drawable.atm_icon))
-                )!!, atm, ImageView(requireContext())
+                            .snippet(atm.address)
+                            .icon(BitmapDescriptorFactory.fromResource(R.drawable.atm_icon))
+                    )!!, atm, ImageView(requireContext())
+                )
             )
-        )
+        }
     }
 }
