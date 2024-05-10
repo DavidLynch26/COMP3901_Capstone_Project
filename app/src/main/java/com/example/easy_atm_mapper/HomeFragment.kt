@@ -3,13 +3,17 @@ package com.example.easy_atm_mapper
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
+import android.media.Image
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Base64
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -82,7 +86,7 @@ class HomeFragment : Fragment() {
     private lateinit var geocoder: Geocoder
     private lateinit var googleMap : GoogleMap
     private lateinit var mapFragment : SupportMapFragment
-    private val markerList: MutableList<Triple<Marker,Atm, ImageView>> = mutableListOf()
+    private val markerList: MutableList<Triple<Marker,Atm, Bitmap>> = mutableListOf()
 
     private lateinit var autocomplete : AutoCompleteTextView
 
@@ -243,6 +247,7 @@ class HomeFragment : Fragment() {
             for(curr in markerList){
                 if(marker == curr.first){
                     atm = curr.second
+                    drawerView.findViewById<ImageView>(R.id.imageViewAtm).setImageBitmap(curr.third)
                     drawerView.findViewById<TextView>(R.id.textViewAddress).text = "Address: ${atm.address}"
                     drawerView.findViewById<TextView>(R.id.textViewWorking).text = "Status: ${atm.working}"
                     drawerView.findViewById<TextView>(R.id.textViewWaitTime).text = "Wait Time ${atm.waitTime.toString()} mins"
@@ -254,36 +259,30 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private suspend fun getAtmImage(photoReference: String, image: ImageView): ImageView {
-        withContext(Dispatchers.IO){
-            val url = "https://maps.googleapis.com/maps/api/place/photo?" +
-                    "maxwidth=400&" +
-                    "photo_reference=$photoReference&" +
-                    "key=$apikey"
+    private suspend fun getAtmImage(photoReference: String): Bitmap {
+        val url = "https://maps.googleapis.com/maps/api/place/photo?" +
+                "maxwidth=400&" +
+                "photo_reference=$photoReference&" +
+                "key=$apikey"
 
-            val photoData = URL(url).readText()
+        return withContext(Dispatchers.IO) {
+            var image = BitmapFactory.decodeResource(resources, R.drawable.atm_icon)
             try{
-//                val decodedBytes = Base64.decode(photoData)
-//                val bitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-//                image.setImageBitmap(bitmap)
-//                Glide.with(requireContext())
-//                    .load(photoData)
-//                    .diskCacheStrategy(DiskCacheStrategy.ALL)
-//                    .into(image)
-//                Log.d("mytagphoto", photoReference)
-
-            } catch(e: Exception){
+                val photoData = URL(url).readText()
+                Log.d("mytag", photoData.isNotEmpty().toString())
+                val imageBtyes = Base64.decode(photoData, Base64.DEFAULT)
+                image = BitmapFactory.decodeByteArray(imageBtyes, 0, imageBtyes.size)
+                image
+            }catch(e: Exception){
                 e.printStackTrace()
+                image
+            }finally {
+                image
             }
-
-
-//            val gson = GsonBuilder().create()
-//            val root = gson.fromJson(response, JsonObject::class.java)
         }
-        Log.d("mytagimage", image.toString())
-        return image
+    }
 
-    }private suspend fun getPhotoReference(placeId: String): String {
+    private suspend fun getPhotoReference(placeId: String): String {
         var photoReference = ""
         withContext(Dispatchers.IO){
             val url = "https://maps.googleapis.com/maps/api/place/details/json?" +
@@ -329,6 +328,7 @@ class HomeFragment : Fragment() {
     private suspend fun updateUI(location: Location) {
         val latLng = LatLng(location.latitude, location.longitude)
         userMarker?.position = latLng
+        Log.d("mytag", latLng.toString())
 
         if (navigation){
             try{
@@ -498,7 +498,6 @@ class HomeFragment : Fragment() {
                         if (name.contains(bankList[0][index]) || name.contains(bankList[1][index])) {
                             val id = r.asJsonObject.get("place_id").asString
                             val isAtm = isAtm(id, selectBank)
-
                             var atm: Atm
 
                             if (isAtm) {
@@ -537,19 +536,18 @@ class HomeFragment : Fragment() {
                                 makeAtm(atm)
                             }
 
+                            val image = getAtmImage(atm.photoReference!!)
+
+                            Log.d("mytag", atm.toString())
+
                             val responseMarker = GlobalScope.launch{
-                                addAtmToMap(name, atm)
+                                addAtmToMap(name, atm, image)
                             }
 
+                            Log.d("mytag", atm.toString())
+                            Log.d("mytag", markerList.toString())
+
                             responseMarker.join()
-
-
-//                            val responseImage = GlobalScope.async {
-//                                getAtmImage(atm.photoReference!!, markerList.last().third)
-//                            }
-//
-//                            val image = responseImage.await()
-//                            Log.d("mytagphoto", image.toString())
                         }
                     }
                     if (markerList.isNotEmpty()) {
@@ -588,6 +586,7 @@ class HomeFragment : Fragment() {
                 "radius=${radius}&" +
                 "type=atm&" +
                 "key=$apikey"
+        Log.d("mytag", url)
         GlobalScope.launch(Dispatchers.IO) {
             try {
                 var response = URL(url).readText()
@@ -723,7 +722,7 @@ class HomeFragment : Fragment() {
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    private fun addAtmToMap(name: String, atm: Atm){
+    private fun addAtmToMap(name: String, atm: Atm, image: Bitmap){
         GlobalScope.launch(Dispatchers.Main){
             markerList.add(
                 Triple(
@@ -738,7 +737,7 @@ class HomeFragment : Fragment() {
                             )
                             .snippet(atm.address)
                             .icon(BitmapDescriptorFactory.fromResource(R.drawable.atm_icon))
-                    )!!, atm, ImageView(requireContext())
+                    )!!, atm, image
                 )
             )
         }
