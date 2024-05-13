@@ -89,7 +89,7 @@ class SignupFragment : Fragment() {
 
             fun make(){
                 if (avail){
-                    usersCollection.document(user.username.toString().trim())
+                    usersCollection.document(user.id!!)
                         .set(user)
                         .addOnSuccessListener {
                             Toast.makeText(context, "Successfully Added User", Toast.LENGTH_SHORT)

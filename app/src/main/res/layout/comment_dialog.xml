@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/comment_bg">
+
+    <TextView
+        android:id="@+id/textViewAtmName_Location"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="30dp"
+        android:text="Bank_Location"
+        app:layout_constraintBottom_toTopOf="@+id/textViewDescription"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.498"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <EditText
+        android:id="@+id/editTextUserComment"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="30dp"
+        android:ems="10"
+        android:hint="Enter a comment"
+        android:inputType="text"
+        app:layout_constraintBottom_toTopOf="@+id/buttonSubmitComment"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.502"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <EditText
+        android:id="@+id/editTextNumberSignedTimeSpent"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:ems="10"
+        android:hint="Enter your wait time"
+        android:inputType="numberSigned"
+        app:layout_constraintBottom_toTopOf="@+id/editTextUserComment"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <TextView
+        android:id="@+id/textViewDescription"
+        android:layout_width="338dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="30dp"
+        android:text="Complete a quick survey to help us keep the ATMs information up to date."
+        app:layout_constraintBottom_toTopOf="@+id/switchWorking"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <TextView
+        android:id="@+id/textViewCommentWorking"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:text="Working?"
+        app:layout_constraintBottom_toTopOf="@+id/editTextNumberSignedTimeSpent"
+        app:layout_constraintStart_toStartOf="@+id/editTextNumberSignedTimeSpent" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switchWorking"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="2dp"
+        android:layout_marginBottom="20dp"
+        android:text=""
+        app:layout_constraintBottom_toTopOf="@+id/editTextNumberSignedTimeSpent"
+        app:layout_constraintEnd_toEndOf="@+id/editTextNumberSignedTimeSpent" />
+
+    <Button
+        android:id="@+id/buttonSubmitComment"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Submit"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

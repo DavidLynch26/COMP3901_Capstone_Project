@@ -102,7 +102,8 @@ class LoginFragment : Fragment() {
                         if (user != null) {
                             if (user.username == username &&
                                 user.password == password) {
-                                makeUserFile(username, password)
+//                                makeUserFile(username, password
+                                MainActivity.userId = user.id!!
                                 Toast.makeText(
                                     context,
                                     "User Login Successfully",

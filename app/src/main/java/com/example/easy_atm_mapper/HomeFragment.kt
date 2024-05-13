@@ -1,6 +1,7 @@
 package com.example.easy_atm_mapper
 
 import android.annotation.SuppressLint
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -8,7 +9,6 @@ import android.graphics.BitmapFactory
 import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
-import android.media.Image
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -21,12 +21,16 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.ListView
 import android.widget.ProgressBar
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.widget.SwitchCompat
 import androidx.fragment.app.Fragment
 import com.example.easy_atm_mapper.models.Atm
 import com.example.easy_atm_mapper.models.MyLatLng
@@ -63,19 +67,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.net.URL
+import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
+import java.util.Date
 import java.util.Locale
-import kotlin.io.encoding.ExperimentalEncodingApi
 
 class HomeFragment : Fragment() {
     private lateinit var view : View
     private lateinit var drawerView : View
     private lateinit var apikey: String
+    private lateinit var userId: String
     private var exists: Boolean = false
     private var navigation: Boolean = false
 
     private lateinit var bottomSheetDialog: BottomSheetDialog
+    private lateinit var commentDialog: Dialog
 
     private val db = Firebase.firestore
     private val banksCollection = db.collection("banks")
@@ -86,7 +93,7 @@ class HomeFragment : Fragment() {
     private lateinit var geocoder: Geocoder
     private lateinit var googleMap : GoogleMap
     private lateinit var mapFragment : SupportMapFragment
-    private val markerList: MutableList<Triple<Marker,Atm, Bitmap>> = mutableListOf()
+    private val markerList: MutableList<Quadruple<Marker,Atm, Bitmap, MutableList<UserComment>>> = mutableListOf()
 
     private lateinit var autocomplete : AutoCompleteTextView
 
@@ -123,7 +130,11 @@ class HomeFragment : Fragment() {
         bottomSheetDialog = BottomSheetDialog(requireContext())
         bottomSheetDialog.setContentView(drawerView)
 
+        commentDialog = Dialog(requireContext())
+        commentDialog.setContentView(R.layout.comment_dialog)
+
         apikey = MainActivity.bundle.getString("apikey").toString()
+        userId = MainActivity.userId
 
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(requireActivity())
 
@@ -177,6 +188,12 @@ class HomeFragment : Fragment() {
                     }
                 }
             }
+        }
+
+        drawerView.findViewById<Button>(R.id.buttonLeaveComment).setOnClickListener{
+           GlobalScope.launch(Dispatchers.Main){
+               showUserCommentDialog()
+           }
         }
 
         drawerView.findViewById<Button>(R.id.buttonStartNavigation).setOnClickListener{
@@ -242,12 +259,19 @@ class HomeFragment : Fragment() {
 
     private fun showAtm(marker: Marker) {
         try{
-            lateinit var atm: Atm
-
             for(curr in markerList){
                 if(marker == curr.first){
-                    atm = curr.second
-                    drawerView.findViewById<ImageView>(R.id.imageViewAtm).setImageBitmap(curr.third)
+                    val atm = curr.second
+                    val image = curr.third
+                    val comments = curr.fourth
+                    val formattedComments = mutableListOf<String>()
+                    val dateFormat = SimpleDateFormat("ccc, LLLL F, Y")
+                    for(comment in comments){
+                        formattedComments.add("${comment.working} - ${comment.timeTaken} mins, ${comment.comment} on ${dateFormat.format(comment.date!!)}")
+                    }
+                    val arrayAdapter = ArrayAdapter(requireContext(), R.layout.comments, formattedComments)
+                    drawerView.findViewById<ListView>(R.id.listViewComments).adapter = arrayAdapter
+                    drawerView.findViewById<ImageView>(R.id.imageViewAtm).setImageBitmap(image)
                     drawerView.findViewById<TextView>(R.id.textViewAddress).text = "Address: ${atm.address}"
                     drawerView.findViewById<TextView>(R.id.textViewWorking).text = "Status: ${atm.working}"
                     drawerView.findViewById<TextView>(R.id.textViewWaitTime).text = "Wait Time ${atm.waitTime.toString()} mins"
@@ -257,6 +281,23 @@ class HomeFragment : Fragment() {
         } catch(e: Exception){
             e.printStackTrace()
         }
+    }
+
+    private suspend fun getUserComments(atm: Atm): MutableList<UserComment> {
+        var comments = mutableListOf<UserComment>()
+        withContext(Dispatchers.IO){
+            banksCollection.document(atm.bank!!).collection("atms").document(atm.id!!).collection("comments")
+                .get()
+                .addOnSuccessListener { querySnapshot ->
+                    for (document in querySnapshot.documents) {
+                        val comment = document.toObject<UserComment>()
+                        if (comment != null) {
+                            comments.add(comment)
+                        }
+                    }
+                }.await()
+        }
+        return comments
     }
 
     private suspend fun getAtmImage(photoReference: String): Bitmap {
@@ -278,6 +319,75 @@ class HomeFragment : Fragment() {
                 image
             }finally {
                 image
+            }
+        }
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    private suspend fun showUserCommentDialog(){
+        commentDialog.show()
+        commentDialog.findViewById<Button>(R.id.buttonSubmitComment).setOnClickListener{
+            val comment = commentDialog.findViewById<EditText>(R.id.editTextUserComment)
+            val timeSpent = commentDialog.findViewById<EditText>(R.id.editTextNumberSignedTimeSpent)
+            val working = commentDialog.findViewById<SwitchCompat>(R.id.switchWorking).isChecked
+
+            if(comment.text.toString().isEmpty()){
+                comment.error = "Please Enter Comment"
+            }
+            if(timeSpent.text.toString().isEmpty()){
+                timeSpent.error = "Please Enter Time Spent"
+            }
+
+            if(comment.text.toString().isNotEmpty() && timeSpent.text.toString().isNotEmpty()){
+                val userComment = UserComment(
+                    userId,
+                    timeSpent.text.toString().toInt(),
+                    if(working) "Working" else "Not Working",
+                    comment.text.toString(),
+                    Date()
+                )
+                for(curr in markerList){
+                    if(clickedMarker == curr.first) {
+                        GlobalScope.launch(Dispatchers.IO){
+                            makeComment(curr.second, userComment)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    private suspend fun showUserCommentDialog(atm: Atm, arrivalDate: Date){
+        commentDialog.setContentView(R.layout.comment_dialog)
+        commentDialog.show()
+        commentDialog.findViewById<Button>(R.id.buttonSubmitComment).setOnClickListener{
+            val comment = commentDialog.findViewById<EditText>(R.id.editTextUserComment)
+            val timeSpent = commentDialog.findViewById<EditText>(R.id.editTextNumberSignedTimeSpent)
+            val working = commentDialog.findViewById<Switch>(R.id.switchWorking).isChecked
+
+            if(comment.text.toString().isEmpty()){
+                comment.error = "Please Enter Comment"
+            }
+            if(timeSpent.text.toString().isEmpty()){
+                timeSpent.error = "Please Enter Time Spent"
+            }
+
+            if(comment.text.toString().isNotEmpty() && timeSpent.text.toString().isNotEmpty()){
+                val completionDate = Date()
+                val timeTaken = (completionDate.time - arrivalDate.time)/(60*1000)
+                val avgTime = ((timeSpent.text.toString().toLong() + timeTaken) / 2).toInt()
+
+                val userComment = UserComment(
+                    userId,
+                    avgTime,
+                    if(working) "Working" else "Not Working",
+                    comment.text.toString(),
+                    Date()
+                )
+                GlobalScope.launch(Dispatchers.IO){
+                    makeComment(atm, userComment)
+                }
             }
         }
     }
@@ -349,7 +459,7 @@ class HomeFragment : Fragment() {
                     val distance = root.getAsJsonObject().get("routes").asJsonArray[0].asJsonObject.get("legs").asJsonArray[0].asJsonObject.get("distance").asJsonObject.get("value").asDouble
 
                     if (distance <= 10.0) {
-                        val arrivalTime = LocalDateTime.now()
+                        val arrival = Date()
                         stopNavigation()
                         withContext(Dispatchers.Main) {
                             Toast.makeText(
@@ -365,36 +475,41 @@ class HomeFragment : Fragment() {
                                         rAtm = marker.second
                                     }
                                 }
-                                val rDialog: AlertDialog = AlertDialog.Builder(requireContext())
-                                    .setTitle("Atm Details")
-                                    .setMessage("Was the ${rAtm.bank} ATM on ${rAtm.address} working?")
-                                    .setPositiveButton("Yes") { _, _ ->
-                                        val userComment = UserComment(
-                                            ChronoUnit.MINUTES.between(
-                                            arrivalTime,
-                                            LocalDateTime.now()),
-                                            "Working"
-                                        )
-                                        GlobalScope.launch(Dispatchers.IO){
-                                            makeComment(rAtm, userComment)
-                                        }
-                                    }
-                                    .setNegativeButton("No") { rDialog, _ ->
-                                        val userComment = UserComment(
-                                            ChronoUnit.MINUTES.between(
-                                                arrivalTime,
-                                                LocalDateTime.now()),
-                                            "Not Working"
-                                        )
-                                        GlobalScope.launch(Dispatchers.IO){
-                                            makeComment(rAtm, userComment)
-                                        }
-                                        rDialog.dismiss()
-                                    }
-                                    .create()
-
-                                rDialog.show()
+                                GlobalScope.launch(Dispatchers.IO) {
+                                    showUserCommentDialog(rAtm, arrival)
+                                }
+//                                val rDialog: AlertDialog = AlertDialog.Builder(requireContext())
+//                                    .setTitle("Atm Details")
+//                                    .setMessage("Was the ${rAtm.bank} ATM on ${rAtm.address} working?")
+//                                    .setPositiveButton("Yes") { _, _ ->
+//                                        val userComment = UserComment(
+//                                            userId,
+//                                            ChronoUnit.MINUTES.between(
+//                                            arrivalTime,
+//                                            LocalDateTime.now()),
+//                                            "Working"
+//                                        )
+//                                        GlobalScope.launch(Dispatchers.IO){
+//                                            makeComment(rAtm, userComment)
+//                                        }
+//                                    }
+//                                    .setNegativeButton("No") { rDialog, _ ->
+//                                        val userComment = UserComment(
+//                                            userId,
+//                                            ChronoUnit.MINUTES.between(
+//                                                arrivalTime,
+//                                                LocalDateTime.now()),
+//                                            "Not Working"
+//                                        )
+//                                        GlobalScope.launch(Dispatchers.IO){
+//                                            makeComment(rAtm, userComment)
+//                                        }
+//                                        rDialog.dismiss()
+//                                    }
+//                                    .create()
+//                                rDialog.show()
                             }
+                            Looper.prepare()
                             val handler = Handler(Looper.getMainLooper())
                             withContext(Dispatchers.IO) {
                                 handler.postDelayed({
@@ -538,10 +653,14 @@ class HomeFragment : Fragment() {
 
                             val image = getAtmImage(atm.photoReference!!)
 
-                            Log.d("mytag", atm.toString())
+                            val responseComment = GlobalScope.async {
+                                getUserComments(atm)
+                            }
+
+                            val comments = responseComment.await()
 
                             val responseMarker = GlobalScope.launch{
-                                addAtmToMap(name, atm, image)
+                                addAtmToMap(name, atm, image, comments)
                             }
 
                             Log.d("mytag", atm.toString())
@@ -556,7 +675,7 @@ class HomeFragment : Fragment() {
                             val location =
                                 LatLng(
                                     marker.second.location!!.latitude,
-                                    marker.second.location!!.longitude
+                                    marker.second.location.longitude
                                 )
                             builder.include(location)
                         }
@@ -671,10 +790,10 @@ class HomeFragment : Fragment() {
         return atm
     }
 
-    private suspend fun getAtmAddress(latlng: LatLng): String{
+    private suspend fun getAtmAddress(latLng: LatLng): String{
         var address = ""
         val url = "https://maps.googleapis.com/maps/api/geocode/json?" +
-                "latlng=${latlng.latitude},${latlng.longitude}&" +
+                "latlng=${latLng.latitude},${latLng.longitude}&" +
                 "key=$apikey"
         withContext(Dispatchers.IO){
             val response = URL(url).readText()
@@ -722,10 +841,10 @@ class HomeFragment : Fragment() {
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    private fun addAtmToMap(name: String, atm: Atm, image: Bitmap){
+    private fun addAtmToMap(name: String, atm: Atm, image: Bitmap, comments: MutableList<UserComment>){
         GlobalScope.launch(Dispatchers.Main){
             markerList.add(
-                Triple(
+                Quadruple(
                     googleMap.addMarker(
                         MarkerOptions()
                             .title (name)
@@ -737,7 +856,7 @@ class HomeFragment : Fragment() {
                             )
                             .snippet(atm.address)
                             .icon(BitmapDescriptorFactory.fromResource(R.drawable.atm_icon))
-                    )!!, atm, image
+                    )!!, atm, image, comments
                 )
             )
         }

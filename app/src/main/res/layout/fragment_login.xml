@@ -10,13 +10,12 @@
         android:id="@+id/textViewLogin"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="30dp"
+        android:layout_marginTop="20dp"
         android:text="Login"
         android:textSize="50sp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.498"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/imageView" />
+        app:layout_constraintTop_toBottomOf="@+id/textViewSlogan" />
 
     <Button
         android:id="@+id/buttonLogin"
@@ -64,15 +63,24 @@
         app:layout_constraintTop_toBottomOf="@+id/editTextPasswordL" />
 
     <ImageView
-        android:id="@+id/imageView"
+        android:id="@+id/imageViewLogo"
         android:layout_width="142dp"
         android:layout_height="142dp"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="35dp"
         android:contentDescription="Easy Atm Mapper Logo"
         android:src="@drawable/easy_atm_mapper_no_background"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.498"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/textViewSlogan"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Locating ATM's near and far with just one click"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/imageViewLogo" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
