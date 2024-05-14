@@ -77,16 +77,6 @@
         app:layout_constraintGuide_begin="206dp"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <TextView
-        android:id="@+id/textViewCurrLocation"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:text="@string/currentLocation"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/buttonSearch" />
-
     <ImageButton
         android:id="@+id/imageButtonRecentre"
         android:layout_width="70dp"

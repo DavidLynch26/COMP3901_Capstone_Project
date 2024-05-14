@@ -6,17 +6,6 @@
     android:layout_height="match_parent"
     android:background="@drawable/comment_bg">
 
-    <TextView
-        android:id="@+id/textViewAtmName_Location"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="30dp"
-        android:text="Bank_Location"
-        app:layout_constraintBottom_toTopOf="@+id/textViewDescription"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.498"
-        app:layout_constraintStart_toStartOf="parent" />
-
     <EditText
         android:id="@+id/editTextUserComment"
         android:layout_width="wrap_content"
@@ -61,7 +50,7 @@
         app:layout_constraintBottom_toTopOf="@+id/editTextNumberSignedTimeSpent"
         app:layout_constraintStart_toStartOf="@+id/editTextNumberSignedTimeSpent" />
 
-    <androidx.appcompat.widget.SwitchCompat
+    <com.google.android.material.switchmaterial.SwitchMaterial
         android:id="@+id/switchWorking"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

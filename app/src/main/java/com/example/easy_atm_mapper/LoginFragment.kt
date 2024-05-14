@@ -30,6 +30,9 @@ class LoginFragment : Fragment() {
 
     var exists: Boolean = false
     private lateinit var view : View
+    private lateinit var mainView : View
+
+    private lateinit var progressBar: ProgressBar
 
     private val db = Firebase.firestore
     private val usersCollection = db.collection("users")
@@ -90,15 +93,17 @@ class LoginFragment : Fragment() {
 
     @OptIn(DelicateCoroutinesApi::class)
     private fun isUser(username: String, password: String) {
-        val pb = (context as MainActivity)
-            .findViewById<ProgressBar>(R.id.progressBar)
-        pb.visibility = View.VISIBLE
+        progressBar = (context as MainActivity)
+            .findViewById(R.id.progressBar)
+        progressBar.bringToFront()
+        progressBar.visibility = View.VISIBLE
         var found : Boolean = false
         GlobalScope.launch (Dispatchers.IO) {
             usersCollection.get()
                 .addOnSuccessListener { querySnapshot ->
                     for (document in querySnapshot.documents) {
                         val user = document.toObject<User>()
+                        Log.d("mytaguser", user.toString())
                         if (user != null) {
                             if (user.username == username &&
                                 user.password == password) {
@@ -113,10 +118,10 @@ class LoginFragment : Fragment() {
                                 Log.d("mytag", "User Login Successfully")
                                 Navigation.findNavController(view)
                                     .navigate(R.id.action_loginFragment_to_homeFragment)
-                                pb.visibility = View.GONE
+                                progressBar.visibility = View.GONE
                                 found = true
+                                break
                             }
-                            break
                         }
                     }
                     if (!found){
@@ -125,13 +130,13 @@ class LoginFragment : Fragment() {
                             "User Not Found",
                             Toast.LENGTH_SHORT)
                             .show()
-                        pb.visibility = View.GONE
+                        progressBar.visibility = View.GONE
                     }
                 }
                 .addOnFailureListener {exception ->
                     Toast.makeText(context, "Error: ${exception.message}", Toast.LENGTH_SHORT)
                         .show()
-                    pb.visibility = View.GONE
+                    progressBar.visibility = View.GONE
                 }
         }
     }

@@ -52,6 +52,7 @@ import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.model.Polyline
 import com.google.android.gms.maps.model.PolylineOptions
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 import com.google.firebase.firestore.toObject
@@ -64,6 +65,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.net.URL
@@ -80,6 +82,8 @@ class HomeFragment : Fragment() {
     private lateinit var userId: String
     private var exists: Boolean = false
     private var navigation: Boolean = false
+
+    private lateinit var progressBar: ProgressBar
 
     private lateinit var bottomSheetDialog: BottomSheetDialog
     private lateinit var commentDialog: Dialog
@@ -190,11 +194,11 @@ class HomeFragment : Fragment() {
             }
         }
 
-        drawerView.findViewById<Button>(R.id.buttonLeaveComment).setOnClickListener{
-           GlobalScope.launch(Dispatchers.Main){
-               showUserCommentDialog()
-           }
-        }
+//        drawerView.findViewById<Button>(R.id.buttonLeaveComment).setOnClickListener{
+//           GlobalScope.launch(Dispatchers.Main){
+//               showUserCommentDialog()
+//           }
+//        }
 
         drawerView.findViewById<Button>(R.id.buttonStartNavigation).setOnClickListener{
             try{
@@ -265,9 +269,13 @@ class HomeFragment : Fragment() {
                     val image = curr.third
                     val comments = curr.fourth
                     val formattedComments = mutableListOf<String>()
-                    val dateFormat = SimpleDateFormat("ccc, LLLL F, Y")
-                    for(comment in comments){
-                        formattedComments.add("${comment.working} - ${comment.timeTaken} mins, ${comment.comment} on ${dateFormat.format(comment.date!!)}")
+                    val dateFormat = SimpleDateFormat("ccc, LLLL d, yyyy @ h:mm a", Locale.getDefault())
+                    val sortedComments = comments.sortedByDescending { it.date }
+                    Log.d("mytagcomments", sortedComments.toString())
+                    if(sortedComments.isNotEmpty()){
+                        for(comment in sortedComments){
+                            formattedComments.add("${comment.working} and took ${comment.timeTaken} mins, ${comment.comment} on ${dateFormat.format(comment.date!!)}")
+                        }
                     }
                     val arrayAdapter = ArrayAdapter(requireContext(), R.layout.comments, formattedComments)
                     drawerView.findViewById<ListView>(R.id.listViewComments).adapter = arrayAdapter
@@ -353,6 +361,7 @@ class HomeFragment : Fragment() {
                         }
                     }
                 }
+                commentDialog.dismiss()
             }
         }
     }
@@ -364,7 +373,7 @@ class HomeFragment : Fragment() {
         commentDialog.findViewById<Button>(R.id.buttonSubmitComment).setOnClickListener{
             val comment = commentDialog.findViewById<EditText>(R.id.editTextUserComment)
             val timeSpent = commentDialog.findViewById<EditText>(R.id.editTextNumberSignedTimeSpent)
-            val working = commentDialog.findViewById<Switch>(R.id.switchWorking).isChecked
+            val working = commentDialog.findViewById<SwitchMaterial>(R.id.switchWorking).isChecked
 
             if(comment.text.toString().isEmpty()){
                 comment.error = "Please Enter Comment"
@@ -475,41 +484,11 @@ class HomeFragment : Fragment() {
                                         rAtm = marker.second
                                     }
                                 }
-                                GlobalScope.launch(Dispatchers.IO) {
+                                runBlocking {
+                                    Log.d("mytagatm", rAtm.toString())
                                     showUserCommentDialog(rAtm, arrival)
                                 }
-//                                val rDialog: AlertDialog = AlertDialog.Builder(requireContext())
-//                                    .setTitle("Atm Details")
-//                                    .setMessage("Was the ${rAtm.bank} ATM on ${rAtm.address} working?")
-//                                    .setPositiveButton("Yes") { _, _ ->
-//                                        val userComment = UserComment(
-//                                            userId,
-//                                            ChronoUnit.MINUTES.between(
-//                                            arrivalTime,
-//                                            LocalDateTime.now()),
-//                                            "Working"
-//                                        )
-//                                        GlobalScope.launch(Dispatchers.IO){
-//                                            makeComment(rAtm, userComment)
-//                                        }
-//                                    }
-//                                    .setNegativeButton("No") { rDialog, _ ->
-//                                        val userComment = UserComment(
-//                                            userId,
-//                                            ChronoUnit.MINUTES.between(
-//                                                arrivalTime,
-//                                                LocalDateTime.now()),
-//                                            "Not Working"
-//                                        )
-//                                        GlobalScope.launch(Dispatchers.IO){
-//                                            makeComment(rAtm, userComment)
-//                                        }
-//                                        rDialog.dismiss()
-//                                    }
-//                                    .create()
-//                                rDialog.show()
                             }
-                            Looper.prepare()
                             val handler = Handler(Looper.getMainLooper())
                             withContext(Dispatchers.IO) {
                                 handler.postDelayed({
@@ -523,9 +502,9 @@ class HomeFragment : Fragment() {
                 e.printStackTrace()
             }
         }
-        withContext(Dispatchers.Main) {
-            view.findViewById<TextView>(R.id.textViewCurrLocation).text = userMarker?.position.toString()
-        }
+//        withContext(Dispatchers.Main) {
+//            view.findViewById<TextView>(R.id.textViewCurrLocation).text = userMarker?.position.toString()
+//        }
     }
 
     private suspend fun getRoute(latLng: LatLng): JsonObject {
@@ -560,26 +539,35 @@ class HomeFragment : Fragment() {
         var working: Pair<Int, Int> = Pair(0,0) // working, not working
         var average: Long
         var sum: Double = 0.0
+        var found: Int = 0
+        val hourFormat = SimpleDateFormat("ccc, LLLL d, yyyy @ h a", Locale.getDefault())
+        Log.d("mytagdate", hourFormat.format(userComment.date!!))
         withContext(Dispatchers.IO){
             banksCollection.document(atm.bank!!).collection("atms").document(atm.id!!).collection("comments")
                 .get()
                 .addOnSuccessListener { querySnapshot ->
                     for(document in querySnapshot.documents) {
-                        Log.d("mytagdocument", document.toString())
                         val comment = document.toObject<UserComment>()
                         if (comment != null) {
-                            if (comment.working == "Working") {
-                                working = Pair(working.first + 1, 0)
-                            } else {
-                                working = Pair(0, working.second + 1)
+                            Log.d("mytagdate", hourFormat.format(comment.date!!) + hourFormat.format(userComment.date!!))
+                            if (hourFormat.format(comment.date!!) == hourFormat.format(userComment.date!!)) {
+                                found++
+                                working = if (comment.working == "Working") {
+                                    Pair(working.first + 1, 0)
+                                } else {
+                                    Pair(0, working.second + 1)
+                                }
+                                sum += comment.timeTaken!!
                             }
-                            sum += comment.timeTaken!!
                         }
                     }
 
+                    sum += userComment.timeTaken!!
+
                     Log.d("mytagsum", sum.toString())
+                    Log.d("mytagfound", found.toString())
                     Log.d("mytagworking", if(working.first > working.second) "Working" else "Not Working")
-                    average = (sum /querySnapshot.size()).toLong()
+                    average = (sum /found).toLong()
 
                     banksCollection.document(atm.bank).collection("atms").document(atm.id)
                         .update(
@@ -598,10 +586,11 @@ class HomeFragment : Fragment() {
         suspend fun addAtm(result: JsonArray){
             try {
                 if (result.size() > 0) {
-                    val pb = (context as MainActivity)
-                        .findViewById<ProgressBar>(R.id.progressBar)
+                    progressBar = (context as MainActivity)
+                        .findViewById(R.id.progressBar)
+                    progressBar.bringToFront()
                     withContext(Dispatchers.Main) {
-                        pb.visibility = View.VISIBLE
+                        progressBar.visibility = View.VISIBLE
                     }
                     for (marker in markerList) {
                         marker.first.remove()
@@ -693,7 +682,7 @@ class HomeFragment : Fragment() {
                         ).show()
                     }
                     withContext(Dispatchers.Main) {
-                        pb.visibility = View.GONE
+                        progressBar.visibility = View.GONE
                     }
                 }
             } catch(e: Exception){
